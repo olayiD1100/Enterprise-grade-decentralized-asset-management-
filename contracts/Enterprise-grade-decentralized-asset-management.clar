@@ -314,3 +314,89 @@
   )
 )
 
+;; ===============================================================================
+;; READ-ONLY INFORMATION RETRIEVAL FUNCTIONS
+;; ===============================================================================
+
+;; Comprehensive asset information retrieval with access control
+;; Retrieves complete asset information for authorized users
+;; @param asset-identifier: The unique asset ID to retrieve
+;; @returns: Result containing asset information or error
+(define-read-only (get-digital-asset-details (asset-identifier uint))
+  (let
+    ;; Retrieve asset information and check permissions
+    (
+      (asset-info (unwrap! (map-get? digital-asset-registry { asset-identifier: asset-identifier })
+        asset-not-found))
+      (user-has-permission (default-to false
+        (get access-granted
+          (map-get? asset-permission-registry { asset-identifier: asset-identifier, authorized-user: tx-sender })
+        )
+      ))
+    )
+    ;; Verify access permissions before returning data
+    (asserts! (asset-exists-in-registry asset-identifier) asset-not-found)
+    (asserts! (or user-has-permission (is-eq (get asset-owner asset-info) tx-sender)) access-denied)
+
+    ;; Return comprehensive asset information
+    (ok {
+      asset-name: (get asset-name asset-info),
+      asset-owner: (get asset-owner asset-info),
+      content-size: (get content-size asset-info),
+      registration-block: (get registration-block asset-info),
+      asset-description: (get asset-description asset-info),
+      category-tags: (get category-tags asset-info)
+    })
+  )
+)
+
+;; Global registry statistics retrieval function
+;; Provides overview statistics about the digital asset registry
+;; @returns: Result containing registry statistics
+(define-read-only (get-registry-statistics)
+  (ok {
+    total-assets-registered: (var-get total-registered-assets),
+    system-administrator: protocol-administrator
+  })
+)
+
+;; Asset ownership verification function
+;; Verifies and returns the owner of a specific asset
+;; @param asset-identifier: The unique asset ID to check
+;; @returns: Result containing owner principal or error
+(define-read-only (get-asset-owner (asset-identifier uint))
+  (match (map-get? digital-asset-registry { asset-identifier: asset-identifier })
+    asset-data (ok (get asset-owner asset-data))
+    asset-not-found
+  )
+)
+
+;; Comprehensive permission status verification
+;; Checks and returns detailed permission information for a user and asset
+;; @param asset-identifier: The unique asset ID
+;; @param user-principal: The principal to check permissions for
+;; @returns: Result containing detailed permission status
+(define-read-only (check-user-access-permissions (asset-identifier uint) (user-principal principal))
+  (let
+    ;; Retrieve asset and permission information
+    (
+      (asset-data (unwrap! (map-get? digital-asset-registry { asset-identifier: asset-identifier })
+        asset-not-found))
+      (has-explicit-permission (default-to false
+        (get access-granted
+          (map-get? asset-permission-registry { asset-identifier: asset-identifier, authorized-user: user-principal })
+        )
+      ))
+    )
+    ;; Return comprehensive permission analysis
+    (ok {
+      has-explicit-access: has-explicit-permission,
+      is-asset-owner: (is-eq (get asset-owner asset-data) user-principal),
+      can-access-asset: (or has-explicit-permission (is-eq (get asset-owner asset-data) user-principal))
+    })
+  )
+)
+
+;; ===============================================================================
+;; END OF DIGITAL ASSET REGISTRY PROTOCOL
+;; ===============================================================================
